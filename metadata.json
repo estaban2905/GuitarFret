@@ -1,0 +1,6 @@
+{
+  "name": "GuitarFret - Visualizador de Escalas y Acordes",
+  "description": "Visualizador de escalas y acordes de guitarra con CAGED y 3NPS, y nuevo Editor de Composición Musical funcional en /compositor con pentagrama interactivo, polifonía y exportación MIDI/MusicXML.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
