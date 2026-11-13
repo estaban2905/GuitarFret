@@ -8,140 +8,63 @@
 import { Note, Scale, Chord, Interval } from 'tonal';
 import guitarChordsRaw from '@tombatossals/chords-db/lib/guitar.json';
 import { FretboardSystem, Systems } from '@moonwave99/fretboard.js';
+import { ROOT_NOTES, TUNINGS, SCALE_TYPES, CHORD_TYPES, type RootNote } from '../constants/music';
+import {
+  getSolfege,
+  formatNoteName,
+  formatPitchName,
+  formatChordSymbol,
+  formatTuningLabels
+} from './notation';
+import type {
+  TuningId,
+  TuningConfig,
+  FretNoteInfo,
+  NoteNotation,
+  RootOccurrence,
+  ScaleDefinition,
+  ScaleSystem,
+  ScalePositionDot,
+  ScaleRunStep,
+  ScaleRunVariation,
+  ScaleRunResult,
+  BoxInfo,
+  ScaleResult,
+  ChordTypeDefinition,
+  ChordPositionData,
+  ChordResult
+} from '../types/music.types';
 
-// ==========================================
-// 1. TÓNICAS Y AFINACIONES
-// ==========================================
-
-export const ROOT_NOTES = [
-  'C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'
-] as const;
-
-export type RootNote = (typeof ROOT_NOTES)[number];
-
-export interface TuningConfig {
-  id: string;
-  name: string;
-  notes: string[]; // De 6ta cuerda (grave) a 1ra cuerda (aguda) ej: ["E2", "A2", "D3", "G3", "B3", "E4"]
-  labels: string[]; // ["E", "A", "D", "G", "B", "E"]
-}
-
-export const TUNINGS: Record<string, TuningConfig> = {
-  standard: {
-    id: 'standard',
-    name: 'Estándar (E A D G B E)',
-    notes: ['E2', 'A2', 'D3', 'G3', 'B3', 'E4'],
-    labels: ['E', 'A', 'D', 'G', 'B', 'E']
-  },
-  dropD: {
-    id: 'dropD',
-    name: 'Drop D (D A D G B E)',
-    notes: ['D2', 'A2', 'D3', 'G3', 'B3', 'E4'],
-    labels: ['D', 'A', 'D', 'G', 'B', 'E']
-  },
-  halfStepDown: {
-    id: 'halfStepDown',
-    name: 'Medio tono abajo (Eb Ab Db Gb Bb Eb)',
-    notes: ['Eb2', 'Ab2', 'Db3', 'Gb3', 'Bb3', 'Eb4'],
-    labels: ['Eb', 'Ab', 'Db', 'Gb', 'Bb', 'Eb']
-  }
+export {
+  ROOT_NOTES,
+  TUNINGS,
+  SCALE_TYPES,
+  CHORD_TYPES,
+  getSolfege,
+  formatNoteName,
+  formatPitchName,
+  formatChordSymbol,
+  formatTuningLabels
 };
-
-export type TuningId = keyof typeof TUNINGS;
-
-// ==========================================
-// 2. FUNCIÓN PROPIA DE CÁLCULO DE NOTAS EN TRASTES
-// ==========================================
-
-export interface FretNoteInfo {
-  string: number; // 1 (aguda) a 6 (grave)
-  fret: number; // 0 (al aire) a N
-  pitch: string; // ej: "C4"
-  noteName: string; // ej: "C"
-  chroma: number; // 0..11
-  octave: number;
-  midi: number;
-  frequency: number; // Hz
-}
-
-// ==========================================
-// 2.1. NOTACIÓN MUSICAL (AMERICANA vs ESPAÑOLA)
-// ==========================================
-
-export type NoteNotation = 'american' | 'spanish';
-
-const SOLFEGE_MAP: Record<string, string> = {
-  'C': 'Do', 'C#': 'Do#', 'Cb': 'Dob', 'Db': 'Reb', 'C##': 'Do##', 'Dbb': 'Rebb',
-  'D': 'Re', 'D#': 'Re#', 'Eb': 'Mib', 'D##': 'Re##', 'Ebb': 'Mibb',
-  'E': 'Mi', 'E#': 'Mi#', 'Fb': 'Fab',
-  'F': 'Fa', 'F#': 'Fa#', 'Gb': 'Solb', 'F##': 'Fa##', 'Gbb': 'Solbb',
-  'G': 'Sol', 'G#': 'Sol#', 'Ab': 'Lab', 'G##': 'Sol##', 'Abb': 'Labb',
-  'A': 'La', 'A#': 'La#', 'Bb': 'Sib', 'A##': 'La##', 'Bbb': 'Sibb',
-  'B': 'Si', 'B#': 'Si#'
+export type {
+  RootNote,
+  TuningId,
+  TuningConfig,
+  FretNoteInfo,
+  NoteNotation,
+  RootOccurrence,
+  ScaleDefinition,
+  ScaleSystem,
+  ScalePositionDot,
+  ScaleRunStep,
+  ScaleRunVariation,
+  ScaleRunResult,
+  BoxInfo,
+  ScaleResult,
+  ChordTypeDefinition,
+  ChordPositionData,
+  ChordResult
 };
-
-/**
- * Convierte un nombre de nota en notación anglosajona (C, D, E...) a solfeo en español (Do, Re, Mi...).
- */
-export function getSolfege(noteName: string): string {
-  if (!noteName) return '';
-  const pc = Note.pitchClass(noteName) || noteName;
-  return SOLFEGE_MAP[pc] || pc;
-}
-
-/**
- * Formatea una clase de altura (pitch class) según la notación seleccionada.
- */
-export function formatNoteName(noteName: string, notation: NoteNotation = 'american'): string {
-  if (!noteName) return '';
-  if (notation === 'spanish') {
-    return getSolfege(noteName);
-  }
-  return Note.pitchClass(noteName) || noteName;
-}
-
-/**
- * Formatea una nota con octava (ej: "C4" -> "C4" o "Do4") según la notación seleccionada.
- */
-export function formatPitchName(pitch: string, notation: NoteNotation = 'american'): string {
-  if (!pitch) return '';
-  if (notation === 'american') return pitch;
-  const match = pitch.match(/^([A-Ga-g][#b♯♭x]*)(-?\d+)$/);
-  if (!match) return formatNoteName(pitch, notation);
-  const [, rawPc, oct] = match;
-  return `${getSolfege(rawPc)}${oct}`;
-}
-
-/**
- * Formatea un cifrado de acorde (ej: "Cmaj7", "F#m7b5", "C/G") según la notación seleccionada.
- */
-export function formatChordSymbol(symbol: string, notation: NoteNotation = 'american'): string {
-  if (!symbol || notation === 'american') return symbol;
-  const match = symbol.match(/^([A-G](?:##|bb|#|b)?)([^/]*)(?:\/([A-G](?:##|bb|#|b)?))?$/);
-  if (!match) return symbol;
-  const [, rootPc, suffix, bassPc] = match;
-  const rootFormatted = getSolfege(rootPc);
-  const bassFormatted = bassPc ? `/${getSolfege(bassPc)}` : '';
-  return `${rootFormatted}${suffix}${bassFormatted}`;
-}
-
-/**
- * Formatea las etiquetas de afinación (ej: ['E','A','D','G','B','E'] o ['Mi','La','Re','Sol','Si','Mi']).
- */
-export function formatTuningLabels(labels: string[], notation: NoteNotation = 'american'): string[] {
-  return labels.map(label => formatNoteName(label, notation));
-}
-
-export interface RootOccurrence {
-  string: number; // 1 (más aguda) a 6 (más grave)
-  fret: number; // 0 a N
-  pitch: string; // ej: "C3"
-  midi: number;
-  noteName: string; // ej: "C"
-  solfege: string; // ej: "Do"
-  octave: number;
-  label: string; // ej: "C — 5.ª cuerda — traste 3 (C3)" o "Do — 5.ª cuerda — traste 3 (Do3)"
-}
 
 /**
  * Calcula todas las apariciones de una tónica en el diapasón según la afinación activa.
@@ -195,7 +118,7 @@ export function getNoteAtFret(
   const targetMidi = openMidi + fret;
   const noteWithOctave = Note.fromMidi(targetMidi);
   const noteName = Note.pitchClass(noteWithOctave);
-  const chroma = Note.chroma(noteName) ?? (targetMidi % 12);
+  const chroma = Note.chroma(noteName) ?? targetMidi % 12;
   const octave = Note.octave(noteWithOctave) ?? Math.floor(targetMidi / 12) - 1;
   const frequency = Note.freq(noteWithOctave) || 440 * Math.pow(2, (targetMidi - 69) / 12);
 
@@ -219,15 +142,39 @@ export function formatInterval(interval: string): string {
   if (!interval) return '';
   const clean = interval.trim();
   const map: Record<string, string> = {
-    '1P': '1', '1d': 'b1', '1A': '#1',
-    '2m': 'b2', '2M': '2', '2A': '#2', '2d': 'bb2',
-    '3m': 'b3', '3M': '3', '3d': 'bb3', '3A': '#3',
-    '4d': 'b4', '4P': '4', '4A': '#4',
-    '5d': 'b5', '5P': '5', '5A': '#5',
-    '6m': 'b6', '6M': '6', '6d': 'bb6', '6A': '#6',
-    '7d': 'bb7', '7m': 'b7', '7M': '7', '7A': '#7',
-    '8P': '1', '9m': 'b9', '9M': '9', '9A': '#9',
-    '11P': '11', '11A': '#11', '13m': 'b13', '13M': '13'
+    '1P': '1',
+    '1d': 'b1',
+    '1A': '#1',
+    '2m': 'b2',
+    '2M': '2',
+    '2A': '#2',
+    '2d': 'bb2',
+    '3m': 'b3',
+    '3M': '3',
+    '3d': 'bb3',
+    '3A': '#3',
+    '4d': 'b4',
+    '4P': '4',
+    '4A': '#4',
+    '5d': 'b5',
+    '5P': '5',
+    '5A': '#5',
+    '6m': 'b6',
+    '6M': '6',
+    '6d': 'bb6',
+    '6A': '#6',
+    '7d': 'bb7',
+    '7m': 'b7',
+    '7M': '7',
+    '7A': '#7',
+    '8P': '1',
+    '9m': 'b9',
+    '9M': '9',
+    '9A': '#9',
+    '11P': '11',
+    '11A': '#11',
+    '13m': 'b13',
+    '13M': '13'
   };
 
   return map[clean] || clean.replace('P', '').replace('M', '');
@@ -242,126 +189,24 @@ export function getIntervalBetween(root: string, targetNote: string): string {
     const targetChroma = Note.chroma(targetNote) ?? 0;
     const semitones = (targetChroma - rootChroma + 12) % 12;
     const semitoneMap: Record<number, string> = {
-      0: '1', 1: 'b2', 2: '2', 3: 'b3', 4: '3', 5: '4',
-      6: 'b5', 7: '5', 8: 'b6', 9: '6', 10: 'b7', 11: '7'
+      0: '1',
+      1: 'b2',
+      2: '2',
+      3: 'b3',
+      4: '3',
+      5: '4',
+      6: 'b5',
+      7: '5',
+      8: 'b6',
+      9: '6',
+      10: 'b7',
+      11: '7'
     };
     return semitoneMap[semitones] || '1';
   }
 }
 
-// ==========================================
-// 4. TIPOS DE ESCALAS Y SISTEMAS
-// ==========================================
-
-export interface ScaleDefinition {
-  id: string;
-  name: string;
-  tonalName: string;
-  category: 'diatonic' | 'pentatonic' | 'modes' | 'other';
-  description: string;
-}
-
-export const SCALE_TYPES: ScaleDefinition[] = [
-  { id: 'major', name: 'Mayor', tonalName: 'major', category: 'diatonic', description: 'Escala diatónica mayor (Jónico). 1 - 2 - 3 - 4 - 5 - 6 - 7' },
-  { id: 'minor', name: 'Menor natural', tonalName: 'minor', category: 'diatonic', description: 'Escala menor natural (Eólico). 1 - 2 - b3 - 4 - 5 - b6 - b7' },
-  { id: 'harmonic minor', name: 'Menor armónica', tonalName: 'harmonic minor', category: 'diatonic', description: 'Menor con séptima mayor (#7). 1 - 2 - b3 - 4 - 5 - b6 - 7' },
-  { id: 'melodic minor', name: 'Menor melódica', tonalName: 'melodic minor', category: 'diatonic', description: 'Menor con 6ta y 7ma mayores. 1 - 2 - b3 - 4 - 5 - 6 - 7' },
-  { id: 'major pentatonic', name: 'Pentatónica mayor', tonalName: 'major pentatonic', category: 'pentatonic', description: 'Cinco notas dulces y consonantes. 1 - 2 - 3 - 5 - 6' },
-  { id: 'minor pentatonic', name: 'Pentatónica menor', tonalName: 'minor pentatonic', category: 'pentatonic', description: 'La reina de los solos de blues y rock. 1 - b3 - 4 - 5 - b7' },
-  { id: 'blues', name: 'Blues menor', tonalName: 'blues', category: 'pentatonic', description: 'Pentatónica menor con la blue note (b5). 1 - b3 - 4 - b5 - 5 - b7' },
-  { id: 'major blues', name: 'Blues mayor', tonalName: 'major blues', category: 'pentatonic', description: 'Pentatónica mayor con nota de paso cromática (b3). 1 - 2 - b3 - 3 - 5 - 6' },
-  { id: 'ionian', name: 'Jónico (Modo I)', tonalName: 'ionian', category: 'modes', description: 'Primer modo griego, idéntico a la escala mayor. 1 - 2 - 3 - 4 - 5 - 6 - 7' },
-  { id: 'dorian', name: 'Dórico (Modo II)', tonalName: 'dorian', category: 'modes', description: 'Menor con sexta mayor brillante. Clásico del funk y rock. 1 - 2 - b3 - 4 - 5 - 6 - b7' },
-  { id: 'phrygian', name: 'Frigio (Modo III)', tonalName: 'phrygian', category: 'modes', description: 'Menor con segunda menor (b2). Sonido flamenco y metal. 1 - b2 - b3 - 4 - 5 - b6 - b7' },
-  { id: 'lydian', name: 'Lidio (Modo IV)', tonalName: 'lydian', category: 'modes', description: 'Mayor con cuarta aumentada (#4). Sonido místico. 1 - 2 - 3 - #4 - 5 - 6 - 7' },
-  { id: 'mixolydian', name: 'Mixolidio (Modo V)', tonalName: 'mixolydian', category: 'modes', description: 'Mayor con séptima menor (b7). Ideal para rock y blues. 1 - 2 - 3 - 4 - 5 - 6 - b7' },
-  { id: 'aeolian', name: 'Eólico (Modo VI)', tonalName: 'aeolian', category: 'modes', description: 'Sexto modo, idéntico a la menor natural. 1 - 2 - b3 - 4 - 5 - b6 - b7' },
-  { id: 'locrian', name: 'Locrio (Modo VII)', tonalName: 'locrian', category: 'modes', description: 'Modo con quinta disminuida (b5) y segunda menor (b2). 1 - b2 - b3 - 4 - b5 - b6 - b7' },
-  { id: 'phrygian dominant', name: 'Frigia dominante', tonalName: 'phrygian dominant', category: 'other', description: 'Quinto modo de la menor armónica. Sonido español y flamenco. 1 - b2 - 3 - 4 - 5 - b6 - b7' },
-  { id: 'lydian dominant', name: 'Lidia dominante (Lidia b7)', tonalName: 'lydian dominant', category: 'other', description: 'Cuarto modo de la menor melódica. Ideal para acordes 7(#11). 1 - 2 - 3 - #4 - 5 - 6 - b7' },
-  { id: 'altered', name: 'Alterada (Superlocria)', tonalName: 'altered', category: 'other', description: 'Séptimo modo de la menor melódica. Máxima tensión dominante. 1 - b2 - #2 - 3 - b5 - b6 - b7' },
-  { id: 'diminished', name: 'Disminuida (Tono-Semitono)', tonalName: 'diminished', category: 'other', description: 'Escala simétrica octatónica. Ideal para acordes dim7. 1 - 2 - b3 - 4 - b5 - b6 - 6 - 7' },
-  { id: 'whole tone', name: 'Tonal (Tonos enteros)', tonalName: 'whole tone', category: 'other', description: 'Escala simétrica hexatónica de tonos enteros. Ideal para acordes aug. 1 - 2 - 3 - #4 - #5 - b7' }
-];
-
-export type ScaleSystem = 'CAGED' | 'TNPS';
-
-export interface ScalePositionDot {
-  string: number; // 1..6
-  fret: number; // 0..21
-  note: string;
-  interval: string;
-  isRoot: boolean;
-  inBox: boolean;
-  pitch: string;
-  finger?: number; // 1=Índice, 2=Medio, 3=Anular, 4=Meñique
-  octave?: number;
-  chroma?: number;
-  midi?: number;
-  isStart?: boolean; // Nota inicial seleccionada del recorrido
-  stepNumber?: number; // Número de orden en el recorrido (1, 2, 3...)
-  inRun?: boolean; // Si pertenece al recorrido activo
-}
-
-export interface ScaleRunStep {
-  step: number; // 1, 2, 3...
-  string: number; // 1..6
-  fret: number;
-  pitch: string; // ej: "C3"
-  noteName: string; // ej: "C"
-  solfege: string; // ej: "Do"
-  interval: string; // ej: "1", "2", "3", "5", "6", "8"
-  degree: number; // 1, 2, 3...
-  isRoot: boolean;
-  isStart: boolean;
-  finger: number; // 1=Índice, 2=Medio, 3=Anular, 4=Meñique
-  midi: number;
-}
-
-export interface ScaleRunVariation {
-  id: string; // ej: "pos-compacta", "pos-extendida"
-  name: string; // ej: "Variación 1: En posición (trastes 2–5)"
-  description: string;
-  fretSpan: [number, number];
-  steps: ScaleRunStep[];
-  direction: 'ascending' | 'descending';
-  span: '1_octave' | '2_octaves';
-}
-
-export interface ScaleRunResult {
-  scaleName: string;
-  root: string;
-  solfegeRoot: string;
-  startOccurrence: RootOccurrence;
-  variations: ScaleRunVariation[];
-  selectedVariationIndex: number;
-  activeVariation: ScaleRunVariation | null;
-  direction: 'ascending' | 'descending';
-  span: '1_octave' | '2_octaves';
-  availableDirections: Array<{ id: 'ascending' | 'descending'; name: string; available: boolean; reason?: string }>;
-  availableSpans: Array<{ id: '1_octave' | '2_octaves'; name: string; available: boolean; reason?: string }>;
-  dots: ScalePositionDot[];
-  errorMessage?: string;
-}
-
-export interface BoxInfo {
-  index: number; // 1..5 o 1..7
-  label: string; // ej: "Posición 1"
-  shapeName: string; // ej: "Forma E"
-  minFret: number;
-  maxFret: number;
-}
-
-export interface ScaleResult {
-  root: string;
-  scaleType: string;
-  scaleName: string;
-  notes: string[];
-  intervals: string[];
-  dots: ScalePositionDot[];
-  boxFretRange?: [number, number];
-  availableBoxes: BoxInfo[];
-}
+// Tipos y constantes importados desde src/types y src/constants
 
 // ==========================================
 // 5. CÁLCULO DE CAJAS ORDENADAS SECUENCIALMENTE
@@ -396,11 +241,13 @@ function simplifyDoubleAccidental(noteName: string): string {
 function getMajorCagedAnchors(fs: FretboardSystem, root: string) {
   const rootChroma = Note.chroma(root) ?? 0;
   return CAGED_KEYS.map(key => {
-    const pos = fs.getScale({
-      type: 'major',
-      root,
-      box: { system: Systems.CAGED, box: key }
-    }).filter(p => p.inBox);
+    const pos = fs
+      .getScale({
+        type: 'major',
+        root,
+        box: { system: Systems.CAGED, box: key }
+      })
+      .filter(p => p.inBox);
 
     const rootDots = new Set(
       pos
@@ -424,7 +271,9 @@ function resolveTrueCagedShape(
   anchors: ReturnType<typeof getMajorCagedAnchors>,
   fallbackKey: string
 ): string {
-  const boxRoots = dots.filter(d => getNoteAtFret(d.string, d.fret, tuningNotes).chroma === rootChroma);
+  const boxRoots = dots.filter(
+    d => getNoteAtFret(d.string, d.fret, tuningNotes).chroma === rootChroma
+  );
   if (boxRoots.length === 0) return fallbackKey;
 
   let bestKey = fallbackKey;
@@ -455,7 +304,13 @@ function buildGeneric3NpsBoxes(
   allScaleNotes: Array<{ string: number; fret: number; chroma?: number; note?: string }>,
   tuningNotes: string[],
   scaleNotes: string[]
-): Array<{ id: number; shapeName: string; dots: Array<{ string: number; fret: number }>; minFret: number; maxFret: number }> {
+): Array<{
+  id: number;
+  shapeName: string;
+  dots: Array<{ string: number; fret: number }>;
+  minFret: number;
+  maxFret: number;
+}> {
   const scaleChromas = scaleNotes.map(n => Note.chroma(n) ?? 0);
   const str6Notes = allScaleNotes
     .filter(p => p.string === 6 && p.fret <= 12)
@@ -473,7 +328,13 @@ function buildGeneric3NpsBoxes(
     if (uniqueStartNotes.length === 7) break;
   }
 
-  const boxes: Array<{ id: number; shapeName: string; dots: Array<{ string: number; fret: number }>; minFret: number; maxFret: number }> = [];
+  const boxes: Array<{
+    id: number;
+    shapeName: string;
+    dots: Array<{ string: number; fret: number }>;
+    minFret: number;
+    maxFret: number;
+  }> = [];
 
   uniqueStartNotes.forEach((startDot, idx) => {
     const dots: Array<{ string: number; fret: number }> = [];
@@ -498,7 +359,9 @@ function buildGeneric3NpsBoxes(
     }
 
     if (valid && dots.length === 18) {
-      const uniqueBoxChromas = new Set(dots.map(d => getNoteAtFret(d.string, d.fret, tuningNotes).chroma));
+      const uniqueBoxChromas = new Set(
+        dots.map(d => getNoteAtFret(d.string, d.fret, tuningNotes).chroma)
+      );
       if (uniqueBoxChromas.size === Math.min(7, scaleChromas.length)) {
         const frets = dots.map(d => d.fret);
         boxes.push({
@@ -532,11 +395,14 @@ export function calculateScaleFretboard(
   const tonalScaleName = `${root} ${scaleDef.tonalName}`;
   const tonalData = Scale.get(tonalScaleName);
 
-  const notes = (tonalData.notes.length > 0 ? tonalData.notes : [root]).map(simplifyDoubleAccidental);
+  const notes = (tonalData.notes.length > 0 ? tonalData.notes : [root]).map(
+    simplifyDoubleAccidental
+  );
   const intervals = tonalData.intervals.map(formatInterval);
   const tuning = TUNINGS[tuningId] || TUNINGS.standard;
   const rootChroma = Note.chroma(root) ?? 0;
-  const isPentatonicOrBlues = scaleDef.category === 'pentatonic' || scaleId === 'blues' || scaleId === 'major blues';
+  const isPentatonicOrBlues =
+    scaleDef.category === 'pentatonic' || scaleId === 'blues' || scaleId === 'major blues';
 
   const fs = new FretboardSystem({
     tuning: tuning.notes,
@@ -569,15 +435,17 @@ export function calculateScaleFretboard(
       scaleId === 'blues'
         ? (rootChroma + 6) % 12 // b5
         : scaleId === 'major blues'
-        ? (rootChroma + 3) % 12 // b3
-        : null;
+          ? (rootChroma + 3) % 12 // b3
+          : null;
 
     for (let b = 1; b <= 5; b++) {
-      const basePositions = fs.getScale({
-        type: basePentType,
-        root,
-        box: { system: Systems.pentatonic, box: b }
-      }).filter(p => p.inBox);
+      const basePositions = fs
+        .getScale({
+          type: basePentType,
+          root,
+          box: { system: Systems.pentatonic, box: b }
+        })
+        .filter(p => p.inBox);
 
       if (basePositions.length > 0) {
         let minFret = Math.min(...basePositions.map(p => p.fret));
@@ -647,11 +515,13 @@ export function calculateScaleFretboard(
       const targetRaiseChroma = (rootChroma + rule.raiseChromaOffset) % 12;
 
       for (const key of CAGED_KEYS) {
-        const basePositions = fs.getScale({
-          type: rule.baseType,
-          root,
-          box: { system: Systems.CAGED, box: key }
-        }).filter(p => p.inBox);
+        const basePositions = fs
+          .getScale({
+            type: rule.baseType,
+            root,
+            box: { system: Systems.CAGED, box: key }
+          })
+          .filter(p => p.inBox);
 
         if (basePositions.length > 0) {
           const dots = basePositions.map(p => {
@@ -673,11 +543,13 @@ export function calculateScaleFretboard(
     } else {
       // Escala mayor y modos griegos: identificar la verdadera forma CAGED relativa a la tónica elegida
       for (const key of CAGED_KEYS) {
-        const positions = fs.getScale({
-          type: scaleDef.tonalName,
-          root,
-          box: { system: Systems.CAGED, box: key }
-        }).filter(p => p.inBox);
+        const positions = fs
+          .getScale({
+            type: scaleDef.tonalName,
+            root,
+            box: { system: Systems.CAGED, box: key }
+          })
+          .filter(p => p.inBox);
 
         if (positions.length > 0) {
           const dots = positions.map(p => ({ string: p.string, fret: p.fret }));
@@ -709,11 +581,13 @@ export function calculateScaleFretboard(
       const targetRaiseChroma = (rootChroma + rule.raiseChromaOffset) % 12;
 
       for (let b = 1; b <= 7; b++) {
-        const basePositions = fs.getScale({
-          type: rule.baseType,
-          root,
-          box: { system: Systems.TNPS, box: b }
-        }).filter(p => p.inBox);
+        const basePositions = fs
+          .getScale({
+            type: rule.baseType,
+            root,
+            box: { system: Systems.TNPS, box: b }
+          })
+          .filter(p => p.inBox);
 
         if (basePositions.length > 0) {
           const dots = basePositions.map(p => {
@@ -754,11 +628,13 @@ export function calculateScaleFretboard(
       rawBoxes.sort((a, b) => a.minFret - b.minFret);
     } else {
       for (let b = 1; b <= 7; b++) {
-        const positions = fs.getScale({
-          type: scaleDef.tonalName,
-          root,
-          box: { system: Systems.TNPS, box: b }
-        }).filter(p => p.inBox);
+        const positions = fs
+          .getScale({
+            type: scaleDef.tonalName,
+            root,
+            box: { system: Systems.TNPS, box: b }
+          })
+          .filter(p => p.inBox);
 
         if (positions.length > 0) {
           const minFret = Math.min(...positions.map(p => p.fret));
@@ -819,12 +695,13 @@ export function calculateScaleFretboard(
       const matchedNote = notes.find(n => (Note.chroma(n) ?? -1) === noteChroma);
       const finalNoteName = simplifyDoubleAccidental(matchedNote || pos.note || noteInfo.noteName);
 
-      const interval = isRoot ? '1' : (formatInterval(pos.interval || '') || getIntervalBetween(root, finalNoteName));
+      const interval = isRoot
+        ? '1'
+        : formatInterval(pos.interval || '') || getIntervalBetween(root, finalNoteName);
       const isInActiveBox = activeBox === null ? true : inBoxMap.has(`${pos.string}-${pos.fret}`);
 
-      const finger = isInActiveBox && activeBox
-        ? calculateFingerForBox(pos.fret, activeMinFret)
-        : undefined;
+      const finger =
+        isInActiveBox && activeBox ? calculateFingerForBox(pos.fret, activeMinFret) : undefined;
 
       return {
         string: pos.string,
@@ -844,10 +721,14 @@ export function calculateScaleFretboard(
   // Asegurar que los puntos de la caja activa existan en dots aunque caigan fuera de allScaleNotes por ortografía
   if (activeBox) {
     activeBox.dots.forEach(boxDot => {
-      if (boxDot.fret <= fretCount && !dots.some(d => d.string === boxDot.string && d.fret === boxDot.fret)) {
+      if (
+        boxDot.fret <= fretCount &&
+        !dots.some(d => d.string === boxDot.string && d.fret === boxDot.fret)
+      ) {
         const noteInfo = getNoteAtFret(boxDot.string, boxDot.fret, tuning.notes);
         const isRoot = noteInfo.chroma === rootChroma;
-        const matchedNote = notes.find(n => (Note.chroma(n) ?? -1) === noteInfo.chroma) || noteInfo.noteName;
+        const matchedNote =
+          notes.find(n => (Note.chroma(n) ?? -1) === noteInfo.chroma) || noteInfo.noteName;
         const finalNoteName = simplifyDoubleAccidental(matchedNote);
         const interval = isRoot ? '1' : getIntervalBetween(root, finalNoteName);
         const finger = calculateFingerForBox(boxDot.fret, activeMinFret);
@@ -951,7 +832,9 @@ export function generateScaleRuns({
       id: 'descending' as const,
       name: 'Descendente',
       available: canDescend,
-      reason: canDescend ? undefined : 'No hay cuerdas o notas más graves para completar una octava descendente'
+      reason: canDescend
+        ? undefined
+        : 'No hay cuerdas o notas más graves para completar una octava descendente'
     }
   ];
 
@@ -965,15 +848,18 @@ export function generateScaleRuns({
       id: '2_octaves' as const,
       name: '2 octavas',
       available: canAscend2Octaves,
-      reason: canAscend2Octaves ? undefined : 'Requiere comenzar en cuerdas más graves (6.ª, 5.ª o 4.ª) y notas con suficiente rango hacia los agudos'
+      reason: canAscend2Octaves
+        ? undefined
+        : 'Requiere comenzar en cuerdas más graves (6.ª, 5.ª o 4.ª) y notas con suficiente rango hacia los agudos'
     }
   ];
 
   // Ajustar si la opción elegida no es válida físicamente
   const effectiveDirection = direction === 'descending' && !canDescend ? 'ascending' : direction;
-  const effectiveSpan = span === '2_octaves' && (!canAscend2Octaves || effectiveDirection === 'descending')
-    ? '1_octave'
-    : span;
+  const effectiveSpan =
+    span === '2_octaves' && (!canAscend2Octaves || effectiveDirection === 'descending')
+      ? '1_octave'
+      : span;
 
   // Obtener datos teóricos de la escala con Tonal
   const tonalScaleName = `${root} ${scaleDef.tonalName}`;
@@ -984,30 +870,20 @@ export function generateScaleRuns({
   // Semitonos de los grados de la escala
   const baseSemitones = scaleIntervals.map(inv => Interval.semitones(inv));
 
-  let targetSemitones: number[] = [];
-  let degreeIndices: number[] = []; // Grado relativo de la escala (1..N)
+  let targetSemitones: number[];
 
   if (effectiveSpan === '1_octave') {
     if (effectiveDirection === 'ascending') {
       targetSemitones = [...baseSemitones, 12];
-      degreeIndices = [...baseSemitones.map((_, i) => i + 1), 1];
     } else {
       // 1 octava descendente: 0, -(12 - s_last)... -12
       const reversedFromOctave = [...baseSemitones].reverse().map(s => s - 12);
       targetSemitones = [0, ...reversedFromOctave];
-      const reversedDegrees = [...baseSemitones.map((_, i) => i + 1)].reverse();
-      degreeIndices = [1, ...reversedDegrees];
     }
   } else {
     // 2 octavas ascendentes
     const secondOctave = baseSemitones.slice(1).map(s => s + 12);
     targetSemitones = [...baseSemitones, 12, ...secondOctave, 24];
-    degreeIndices = [
-      ...baseSemitones.map((_, i) => i + 1),
-      1,
-      ...baseSemitones.slice(1).map((_, i) => i + 2),
-      1
-    ];
   }
 
   const targetMidis = targetSemitones.map(s => startNote.midi + s);
@@ -1033,11 +909,28 @@ export function generateScaleRuns({
 
   if (!stepsCandidates.some(c => c.length === 0)) {
     // Cantidad de cuerdas disponibles en el sentido seleccionado
-    const numStringsAvailable = effectiveDirection === 'ascending' ? startString : (7 - startString);
-    const maxNotesPerString = numStringsAvailable === 1 ? 9 : (numStringsAvailable <= 2 ? 5 : (effectiveSpan === '2_octaves' ? 4 : 3));
-    const allowedSpan = numStringsAvailable === 1 ? 14 : (numStringsAvailable <= 2 ? 8 : (effectiveSpan === '2_octaves' ? 7 : 5));
+    const numStringsAvailable = effectiveDirection === 'ascending' ? startString : 7 - startString;
+    const maxNotesPerString =
+      numStringsAvailable === 1
+        ? 9
+        : numStringsAvailable <= 2
+          ? 5
+          : effectiveSpan === '2_octaves'
+            ? 4
+            : 3;
+    const allowedSpan =
+      numStringsAvailable === 1
+        ? 14
+        : numStringsAvailable <= 2
+          ? 8
+          : effectiveSpan === '2_octaves'
+            ? 7
+            : 5;
 
-    function dfs(step: number, currentPath: Array<{ step: number; string: number; fret: number; midi: number }>) {
+    function dfs(
+      step: number,
+      currentPath: Array<{ step: number; string: number; fret: number; midi: number }>
+    ) {
       if (step === targetMidis.length) {
         validPaths.push([...currentPath]);
         return;
@@ -1097,7 +990,7 @@ export function generateScaleRuns({
       if (hasOpen) score += 30;
     }
 
-    const handCenter = startFret > 0 ? (startFret + 1.5) : 2;
+    const handCenter = startFret > 0 ? startFret + 1.5 : 2;
     for (const f of frets) {
       score += Math.abs(f - handCenter) * 2;
     }
@@ -1122,7 +1015,7 @@ export function generateScaleRuns({
       name: `Variación 1: En posición (trastes ${minF1}–${maxF1})`,
       description: `Digitación compacta estándar de ${effectiveSpan === '1_octave' ? '1 octava' : '2 octavas'} ${effectiveDirection === 'ascending' ? 'ascendente' : 'descendente'}.`,
       fretSpan: [minF1, maxF1],
-      steps: mapPathToSteps(bestPath, scaleNotes, scaleIntervals, root, solfegeRoot, tuning.notes, minF1),
+      steps: mapPathToSteps(bestPath, scaleNotes, root, tuning.notes, minF1),
       direction: effectiveDirection,
       span: effectiveSpan
     });
@@ -1139,16 +1032,17 @@ export function generateScaleRuns({
       const minF2 = Math.min(...frets2);
       const maxF2 = Math.max(...frets2);
       const hasOpen = frets2.some(f => f === 0);
-      const varName = hasOpen && startFret > 0
-        ? `Variación 2: Con cuerdas al aire (trastes ${minF2}–${maxF2})`
-        : `Variación 2: Alternativa (trastes ${minF2}–${maxF2})`;
+      const varName =
+        hasOpen && startFret > 0
+          ? `Variación 2: Con cuerdas al aire (trastes ${minF2}–${maxF2})`
+          : `Variación 2: Alternativa (trastes ${minF2}–${maxF2})`;
 
       variations.push({
         id: 'var-2',
         name: varName,
         description: 'Digitación alternativa con diferente distribución de cuerdas o extensión.',
         fretSpan: [minF2, maxF2],
-        steps: mapPathToSteps(altPath, scaleNotes, scaleIntervals, root, solfegeRoot, tuning.notes, minF2),
+        steps: mapPathToSteps(altPath, scaleNotes, root, tuning.notes, minF2),
         direction: effectiveDirection,
         span: effectiveSpan
       });
@@ -1156,8 +1050,12 @@ export function generateScaleRuns({
 
     // 3. Tercera variación si existe otra alternativa relevante
     const thirdPath = validPaths.find(p => {
-      const isDiff1 = p.some((pt, idx) => pt.string !== bestPath[idx].string || pt.fret !== bestPath[idx].fret);
-      const isDiff2 = altPath ? p.some((pt, idx) => pt.string !== altPath[idx].string || pt.fret !== altPath[idx].fret) : true;
+      const isDiff1 = p.some(
+        (pt, idx) => pt.string !== bestPath[idx].string || pt.fret !== bestPath[idx].fret
+      );
+      const isDiff2 = altPath
+        ? p.some((pt, idx) => pt.string !== altPath[idx].string || pt.fret !== altPath[idx].fret)
+        : true;
       return isDiff1 && isDiff2;
     });
 
@@ -1171,7 +1069,7 @@ export function generateScaleRuns({
         name: `Variación 3: Extendida (trastes ${minF3}–${maxF3})`,
         description: 'Variación extendida a lo largo del diapasón.',
         fretSpan: [minF3, maxF3],
-        steps: mapPathToSteps(thirdPath, scaleNotes, scaleIntervals, root, solfegeRoot, tuning.notes, minF3),
+        steps: mapPathToSteps(thirdPath, scaleNotes, root, tuning.notes, minF3),
         direction: effectiveDirection,
         span: effectiveSpan
       });
@@ -1197,7 +1095,7 @@ export function generateScaleRuns({
     .filter(pos => pos.fret <= fretCount)
     .map(pos => {
       const rawNote = pos.note || '';
-      const noteChroma = pos.chroma ?? (rawNote ? (Note.chroma(rawNote) || 0) : 0);
+      const noteChroma = pos.chroma ?? (rawNote ? Note.chroma(rawNote) || 0 : 0);
       const isRoot = noteChroma === rootChroma;
       const noteInfo = getNoteAtFret(pos.string, pos.fret, tuning.notes);
 
@@ -1206,7 +1104,8 @@ export function generateScaleRuns({
       if (matchedNote) finalNoteName = matchedNote;
       else if (!finalNoteName) finalNoteName = noteInfo.noteName;
 
-      const interval = formatInterval(pos.interval || '') || getIntervalBetween(root, finalNoteName);
+      const interval =
+        formatInterval(pos.interval || '') || getIntervalBetween(root, finalNoteName);
       const runStep = runStepsMap.get(`${pos.string}-${pos.fret}`);
       const inRun = Boolean(runStep);
       const isStart = runStep?.isStart ?? false;
@@ -1271,9 +1170,10 @@ export function generateScaleRuns({
     availableDirections,
     availableSpans,
     dots,
-    errorMessage: variations.length === 0
-      ? `No es posible completar un recorrido ${effectiveDirection === 'ascending' ? 'ascendente' : 'descendente'} de ${effectiveSpan === '1_octave' ? '1 octava' : '2 octavas'} desde ${solfegeRoot} (${startString}.ª cuerda, traste ${startFret}) dentro del rango de ${fretCount} trastes.`
-      : undefined
+    errorMessage:
+      variations.length === 0
+        ? `No es posible completar un recorrido ${effectiveDirection === 'ascending' ? 'ascendente' : 'descendente'} de ${effectiveSpan === '1_octave' ? '1 octava' : '2 octavas'} desde ${solfegeRoot} (${startString}.ª cuerda, traste ${startFret}) dentro del rango de ${fretCount} trastes.`
+        : undefined
   };
 }
 
@@ -1283,9 +1183,7 @@ export function generateScaleRuns({
 function mapPathToSteps(
   path: Array<{ step: number; string: number; fret: number; midi: number }>,
   scaleNotes: string[],
-  scaleIntervals: string[],
   root: string,
-  solfegeRoot: string,
   tuningNotes: string[],
   minBoxFret: number
 ): ScaleRunStep[] {
@@ -1301,9 +1199,8 @@ function mapPathToSteps(
     if (matchedNote) finalNoteName = matchedNote;
 
     const solfege = getSolfege(finalNoteName);
-    const interval = isRoot && isStart
-      ? '1'
-      : (formatInterval(getIntervalBetween(root, finalNoteName)) || '1');
+    const interval =
+      isRoot && isStart ? '1' : formatInterval(getIntervalBetween(root, finalNoteName)) || '1';
 
     const finger = calculateFingerForBox(node.fret, minBoxFret);
 
@@ -1315,7 +1212,7 @@ function mapPathToSteps(
       noteName: finalNoteName,
       solfege,
       interval,
-      degree: ((index) % scaleNotes.length) + 1,
+      degree: (index % scaleNotes.length) + 1,
       isRoot,
       isStart,
       finger,
@@ -1327,64 +1224,6 @@ function mapPathToSteps(
 // ==========================================
 // 6. ACORDES Y CHORDS-DB
 // ==========================================
-
-export interface ChordTypeDefinition {
-  suffix: string; // Nombre en chords-db
-  name: string; // Nombre en español
-  symbol: string; // Símbolo usual
-  description: string;
-}
-
-export const CHORD_TYPES: ChordTypeDefinition[] = [
-  { suffix: 'major', name: 'Mayor', symbol: '', description: 'Tríada mayor: tónica, tercera mayor, quinta justa (1 - 3 - 5)' },
-  { suffix: 'minor', name: 'Menor', symbol: 'm', description: 'Tríada menor: tónica, tercera menor, quinta justa (1 - b3 - 5)' },
-  { suffix: '5', name: 'Quinta / Power Chord (5)', symbol: '5', description: 'Acorde de potencia sin tercera: tónica y quinta justa (1 - 5)' },
-  { suffix: '7', name: 'Séptima dominante (7)', symbol: '7', description: 'Acorde dominante: 1 - 3 - 5 - b7. Tensión que resuelve' },
-  { suffix: 'maj7', name: 'Mayor séptima (maj7)', symbol: 'maj7', description: 'Acorde elegante con séptima mayor: 1 - 3 - 5 - 7' },
-  { suffix: 'm7', name: 'Menor séptima (m7)', symbol: 'm7', description: 'Acorde menor suave: 1 - b3 - 5 - b7' },
-  { suffix: 'mmaj7', name: 'Menor mayor séptima (mMaj7)', symbol: 'mMaj7', description: 'Acorde menor con séptima mayor: 1 - b3 - 5 - 7' },
-  { suffix: 'sus2', name: 'Suspendido 2 (sus2)', symbol: 'sus2', description: 'Tercera sustituida por segunda mayor: 1 - 2 - 5' },
-  { suffix: 'sus4', name: 'Suspendido 4 (sus4)', symbol: 'sus4', description: 'Tercera sustituida por cuarta justa: 1 - 4 - 5' },
-  { suffix: 'dim', name: 'Disminuido (dim)', symbol: 'dim', description: 'Tríada disminuida tensa: 1 - b3 - b5' },
-  { suffix: 'dim7', name: 'Disminuido séptima (dim7)', symbol: 'dim7', description: 'Acorde simétrico disminuido con 7ma disminuida: 1 - b3 - b5 - bb7' },
-  { suffix: 'aug', name: 'Aumentado (aug)', symbol: 'aug', description: 'Tríada con quinta aumentada: 1 - 3 - #5' },
-  { suffix: 'add9', name: 'Añadida novena (add9)', symbol: 'add9', description: 'Tríada mayor con la novena agregada: 1 - 3 - 5 - 9' },
-  { suffix: 'm7b5', name: 'Semidisminuido (m7b5)', symbol: 'm7b5', description: 'Acorde semidisminuido: 1 - b3 - b5 - b7' },
-  { suffix: '9', name: 'Novena dominante (9)', symbol: '9', description: 'Dominante extendido con novena: 1 - 3 - 5 - b7 - 9' }
-];
-
-export interface ChordPositionData {
-  frets: number[]; // Trastes en formato chords-db (index 0 = 6ta cuerda, index 5 = 1ra)
-  fingers: number[]; // Dedos (0 = al aire/silencio, 1 = índice, 2 = medio, 3 = anular, 4 = meñique)
-  baseFret: number; // Traste base donde inicia el diagrama vertical
-  barres: number[]; // Cejillas relativas
-  midi?: number[];
-  capo?: boolean;
-  absoluteFrets: number[]; // Trastes absolutos calculados en el mástil (0..N, o -1 si muteada)
-  stringNotes: Array<{
-    string: number; // 1..6
-    fret: number; // -1 (muteada), 0 (al aire), >0
-    noteName: string;
-    interval: string;
-    isRoot: boolean;
-    finger: number;
-    pitch: string;
-    midi: number;
-  }>;
-}
-
-export interface ChordResult {
-  root: string;
-  suffix: string;
-  chordName: string;
-  symbol: string;
-  notes: string[];
-  intervals: string[];
-  positions: ChordPositionData[];
-  selectedPositionIndex: number;
-  currentPosition?: ChordPositionData;
-  allFretboardDots: ScalePositionDot[];
-}
 
 function getChordsDbKey(root: string): string {
   if (root === 'C#') return 'Csharp';
@@ -1400,11 +1239,21 @@ export function calculateAbsoluteFret(rawFret: number, baseFret: number): number
 
 interface RawDbPosition {
   frets: number[];
-  fingers: number[];
+  fingers?: number[];
   baseFret: number;
   barres?: number[];
   midi?: number[];
   capo?: boolean;
+}
+
+interface RawDbChordEntry {
+  key: string;
+  suffix: string;
+  positions: RawDbPosition[];
+}
+
+interface RawChordsDatabase {
+  chords: Record<string, RawDbChordEntry[]>;
 }
 
 /**
@@ -1412,24 +1261,16 @@ interface RawDbPosition {
  * para corregir o priorizar digitaciones que en chords-db tienen notas erróneas o inversiones de 5ta en el bajo.
  */
 const CANONICAL_CHORD_OVERRIDES: Record<string, RawDbPosition[]> = {
-  'C:maj7': [
-    { frets: [-1, 3, 2, 0, 0, 0], fingers: [0, 3, 2, 0, 0, 0], baseFret: 1, barres: [] }
-  ],
+  'C:maj7': [{ frets: [-1, 3, 2, 0, 0, 0], fingers: [0, 3, 2, 0, 0, 0], baseFret: 1, barres: [] }],
   'B:major': [
     { frets: [-1, 1, 3, 3, 3, 1], fingers: [0, 1, 2, 3, 4, 1], baseFret: 2, barres: [1] }
   ],
   'B:minor': [
     { frets: [-1, 1, 3, 3, 2, 1], fingers: [0, 1, 3, 4, 2, 1], baseFret: 2, barres: [1] }
   ],
-  'B:m7': [
-    { frets: [-1, 1, 3, 1, 2, 1], fingers: [0, 1, 3, 1, 2, 1], baseFret: 2, barres: [1] }
-  ],
-  'B:sus2': [
-    { frets: [-1, 1, 3, 3, 1, 1], fingers: [0, 1, 3, 4, 1, 1], baseFret: 2, barres: [1] }
-  ],
-  'B:sus4': [
-    { frets: [-1, 1, 3, 3, 4, 1], fingers: [0, 1, 2, 3, 4, 1], baseFret: 2, barres: [1] }
-  ],
+  'B:m7': [{ frets: [-1, 1, 3, 1, 2, 1], fingers: [0, 1, 3, 1, 2, 1], baseFret: 2, barres: [1] }],
+  'B:sus2': [{ frets: [-1, 1, 3, 3, 1, 1], fingers: [0, 1, 3, 4, 1, 1], baseFret: 2, barres: [1] }],
+  'B:sus4': [{ frets: [-1, 1, 3, 3, 4, 1], fingers: [0, 1, 2, 3, 4, 1], baseFret: 2, barres: [1] }],
   'C#:aug': [
     { frets: [-1, 4, 3, 2, 2, 1], fingers: [0, 4, 3, 2, 2, 1], baseFret: 1, barres: [] },
     { frets: [-1, 4, 3, 2, 2, -1], fingers: [0, 4, 3, 1, 2, 0], baseFret: 1, barres: [] }
@@ -1519,16 +1360,18 @@ export function getChordData(
   tuningId: TuningId = 'standard',
   fretCount = 21
 ): ChordResult {
-  const chordsDict = (guitarChordsRaw as any).chords;
+  const chordsDict = (guitarChordsRaw as unknown as RawChordsDatabase).chords;
   const dbKey = getChordsDbKey(root);
   const chordsForKey = chordsDict[dbKey] || [];
-  const foundChord = chordsForKey.find((c: any) => c.suffix === suffix);
+  const foundChord = chordsForKey.find(c => c.suffix === suffix);
 
   const chordDef = CHORD_TYPES.find(ct => ct.suffix === suffix) || CHORD_TYPES[0];
   const chordSymbol = `${root}${chordDef.symbol}`;
 
   const tonalChord = Chord.get(`${root}${chordDef.symbol || 'M'}`);
-  const notes = (tonalChord.notes.length > 0 ? tonalChord.notes : [root]).map(simplifyDoubleAccidental);
+  const notes = (tonalChord.notes.length > 0 ? tonalChord.notes : [root]).map(
+    simplifyDoubleAccidental
+  );
   const intervals = tonalChord.intervals.map(formatInterval);
 
   const tuning = TUNINGS[tuningId] || TUNINGS.standard;
@@ -1548,12 +1391,12 @@ export function getChordData(
   });
 
   const stdTuning = TUNINGS.standard.notes;
-  let candidateRawPositions: RawDbPosition[] = [];
 
+  let candidateRawPositions: RawDbPosition[];
   if (suffix === '5') {
     candidateRawPositions = buildPowerChordPositions(root);
   } else {
-    const dbPositions = ((foundChord?.positions || []) as RawDbPosition[]).filter(p =>
+    const dbPositions = (foundChord?.positions || []).filter(p =>
       isValidChordDbPosition(p, requiredChromas, essentialChromas)
     );
 
@@ -1651,7 +1494,8 @@ export function getChordData(
       const noteInfo = getNoteAtFret(stringNum, fret, tuning.notes);
       if (chordChromas.includes(noteInfo.chroma)) {
         const isRoot = noteInfo.chroma === rootChroma;
-        const matchingNote = notes.find(n => (Note.chroma(n) ?? -1) === noteInfo.chroma) || noteInfo.noteName;
+        const matchingNote =
+          notes.find(n => (Note.chroma(n) ?? -1) === noteInfo.chroma) || noteInfo.noteName;
         const finalNoteName = simplifyDoubleAccidental(matchingNote);
         const interval = isRoot ? '1' : getIntervalBetween(root, finalNoteName);
 
